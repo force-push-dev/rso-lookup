@@ -113,6 +113,14 @@
       overflow: hidden;
       text-overflow: ellipsis;
     }
+    .card-query {
+      font-size: 0.75rem;
+      color: #94a3b8;
+      margin-top: 0.15rem;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
 
     .rate-badge {
       font-size: 0.8rem;
@@ -424,6 +432,14 @@
     const headerText = el('div', 'card-header-text');
     headerText.appendChild(el('div', 'card-title', titleText));
     headerText.appendChild(el('div', 'card-address', prop.address || data.query || ''));
+
+    // If ZIMAS matched a different house number than what was typed, flag the mismatch
+    const typedHouseNum   = input.value.trim().match(/^\d+/)?.[0];
+    const matchedHouseNum = (prop.address || '').match(/^\d+/)?.[0];
+    if (prop.address && typedHouseNum && matchedHouseNum && typedHouseNum !== matchedHouseNum) {
+      headerText.appendChild(el('div', 'card-query', 'Your search: ' + input.value.trim()));
+    }
+
     header.appendChild(headerText);
 
     if (ri.max_pct != null) {
