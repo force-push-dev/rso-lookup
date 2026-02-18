@@ -197,6 +197,29 @@
     .share-btn:hover { background: #e2e8f0; }
     .share-btn.copied { background: #dcfce7; color: #15803d; border-color: #bbf7d0; }
 
+    /* ── External links ── */
+    .card-links {
+      padding: 0.75rem 1.5rem;
+      border-top: 1px solid #f1f5f9;
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+      flex-wrap: wrap;
+    }
+    .card-links-label { font-size: 0.75rem; color: #94a3b8; margin-right: 0.25rem; }
+    .ext-link {
+      font-size: 0.8rem;
+      font-weight: 500;
+      padding: 0.3rem 0.7rem;
+      border: 1px solid #e2e8f0;
+      border-radius: 6px;
+      color: #475569;
+      text-decoration: none;
+      background: #f8fafc;
+      transition: background 0.15s, border-color 0.15s;
+    }
+    .ext-link:hover { background: #f1f5f9; border-color: #cbd5e1; color: #1e293b; }
+
     /* ── Loading / error states ── */
     .loading {
       text-align: center;
@@ -328,6 +351,15 @@
     const url = new URL(window.location.href);
     url.searchParams.set('address', address);
     return url.toString();
+  }
+
+  function externalSearchUrls(address) {
+    const slug = address.replace(/,/g, '').replace(/\s+/g, '-').replace(/-+/g, '-').trim();
+    return {
+      zillow:   'https://www.zillow.com/homes/' + slug + '_rb/',
+      redfin:   'https://www.redfin.com/homes/' + encodeURIComponent(address),
+      gmaps:    'https://maps.google.com/?q='   + encodeURIComponent(address),
+    };
   }
 
   // ── DOM helpers ────────────────────────────────────────────────
@@ -530,6 +562,30 @@
       body.appendChild(warn);
     }
 
+    // ── External links ──
+    const searchAddr = data.query || input.value.trim();
+    const urls = externalSearchUrls(searchAddr);
+    const linksRow = el('div', 'card-links');
+    linksRow.appendChild(el('span', 'card-links-label', 'Search:'));
+
+    const zillowLink = el('a', 'ext-link', 'Zillow');
+    zillowLink.href = urls.zillow;
+    zillowLink.target = '_blank';
+    zillowLink.rel = 'noopener';
+    linksRow.appendChild(zillowLink);
+
+    const redfinLink = el('a', 'ext-link', 'Redfin');
+    redfinLink.href = urls.redfin;
+    redfinLink.target = '_blank';
+    redfinLink.rel = 'noopener';
+    linksRow.appendChild(redfinLink);
+
+    const mapsLink = el('a', 'ext-link', 'Google Maps');
+    mapsLink.href = urls.gmaps;
+    mapsLink.target = '_blank';
+    mapsLink.rel = 'noopener';
+    linksRow.appendChild(mapsLink);
+
     // ── Footer ──
     const footer = el('div', 'card-footer');
     footer.appendChild(el('small', null, 'Data from ZIMAS / WeHo RSO registry'));
@@ -552,6 +608,7 @@
     const card = el('div', 'card');
     card.appendChild(header);
     card.appendChild(body);
+    card.appendChild(linksRow);
     card.appendChild(footer);
     resultDiv.appendChild(card);
   }
