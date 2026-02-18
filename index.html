@@ -247,6 +247,17 @@
     }
     .error-card-title { font-weight: 700; margin-bottom: 0.3rem; }
 
+    .unsupported-card {
+      background: #fafaf9;
+      border: 1px solid #e7e5e4;
+      border-radius: 12px;
+      padding: 1.25rem 1.5rem;
+      font-size: 0.9rem;
+      color: #57534e;
+    }
+    .unsupported-card-title { font-weight: 700; color: #1c1917; margin-bottom: 0.4rem; }
+    .unsupported-card-note  { font-size: 0.8rem; color: #78716c; margin-top: 0.5rem; }
+
     /* ── Rates warning ── */
     .rates-warning {
       margin-top: 0.75rem;
@@ -293,7 +304,7 @@
     >
     <button type="submit" id="submit-btn">Look Up</button>
   </form>
-  <p class="search-hint">City of LA and West Hollywood addresses. Include city name for best results.</p>
+  <p class="search-hint">Covers City of Los Angeles and West Hollywood. Include city name for best results.</p>
 
   <div id="result"></div>
 </main>
@@ -438,10 +449,18 @@
     clearResult();
 
     if (!data.success) {
-      const card = el('div', 'error-card');
-      card.appendChild(el('div', 'error-card-title', 'Lookup failed'));
-      card.appendChild(document.createTextNode(data.error || data.message || 'Unknown error from API.'));
-      resultDiv.appendChild(card);
+      if (data.unsupported_city) {
+        const card = el('div', 'unsupported-card');
+        card.appendChild(el('div', 'unsupported-card-title', data.unsupported_city + ' is not supported'));
+        card.appendChild(document.createTextNode('Rent control lookup currently covers the City of Los Angeles and West Hollywood only.'));
+        card.appendChild(el('div', 'unsupported-card-note', 'Santa Monica, Beverly Hills, and other cities may be added in the future.'));
+        resultDiv.appendChild(card);
+      } else {
+        const card = el('div', 'error-card');
+        card.appendChild(el('div', 'error-card-title', 'Lookup failed'));
+        card.appendChild(document.createTextNode(data.error || data.message || 'Unknown error from API.'));
+        resultDiv.appendChild(card);
+      }
       return;
     }
 
