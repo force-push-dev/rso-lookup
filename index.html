@@ -328,10 +328,29 @@
 
   // ── Cache helpers ──────────────────────────────────────────────
 
+  // Lightweight normalization so variations like "612 S Flower Street Los Angeles CA"
+  // and "612 s flower st los angeles california" resolve to the same cache key.
+  function normalizeAddr(address) {
+    return address.toLowerCase()
+      .replace(/\bcalifornia\b/g, 'ca')
+      .replace(/\bstreet\b/g,    'st')
+      .replace(/\bavenue\b/g,    'ave')
+      .replace(/\bboulevard\b/g, 'blvd')
+      .replace(/\bdrive\b/g,     'dr')
+      .replace(/\broad\b/g,      'rd')
+      .replace(/\blane\b/g,      'ln')
+      .replace(/\bplace\b/g,     'pl')
+      .replace(/\bcourt\b/g,     'ct')
+      .replace(/,/g, '')
+      .replace(/\s+/g, ' ')
+      .trim();
+  }
+
   function cacheGet(address) {
     try {
       const store = JSON.parse(localStorage.getItem(CACHE_KEY) || '{}');
-      const entry = store[address.toLowerCase()];
+      const key   = normalizeAddr(address);
+      const entry = store[key];
       if (!entry) return null;
       if (Date.now() - entry.ts > CACHE_TTL) return null;
       return entry.data;
@@ -341,7 +360,9 @@
   function cacheSet(address, data) {
     try {
       const store = JSON.parse(localStorage.getItem(CACHE_KEY) || '{}');
-      store[address.toLowerCase()] = { ts: Date.now(), data };
+      // Store under the server-normalized query so future variations hit the cache
+      const key = normalizeAddr((data && data.query) || address);
+      store[key] = { ts: Date.now(), data };
       localStorage.setItem(CACHE_KEY, JSON.stringify(store));
     } catch {}
   }
@@ -366,11 +387,11 @@
   }
 
   function externalSearchUrls(address) {
-    const slug = address.replace(/,/g, '').replace(/\s+/g, '-').replace(/-+/g, '-').trim();
+    const slug = address.replace(/,/g, '').replace(/\s+/g, '-').replace(/-+/g, '-').trim().toLowerCase();
     return {
-      zillow:   'https://www.zillow.com/homes/' + slug + '_rb/',
-      redfin:   'https://www.redfin.com/homes/' + encodeURIComponent(address),
-      gmaps:    'https://maps.google.com/?q='   + encodeURIComponent(address),
+      zillow:   'https://www.zillow.com/homes/'   + slug + '_rb/',
+      apartments: 'https://www.apartments.com/'  + slug + '/',
+      gmaps:    'https://maps.google.com/?q='     + encodeURIComponent(address),
     };
   }
 
@@ -594,11 +615,11 @@
     zillowLink.rel = 'noopener';
     linksRow.appendChild(zillowLink);
 
-    const redfinLink = el('a', 'ext-link', 'Redfin');
-    redfinLink.href = urls.redfin;
-    redfinLink.target = '_blank';
-    redfinLink.rel = 'noopener';
-    linksRow.appendChild(redfinLink);
+    const aptLink = el('a', 'ext-link', 'Apartments.com');
+    aptLink.href = urls.apartments;
+    aptLink.target = '_blank';
+    aptLink.rel = 'noopener';
+    linksRow.appendChild(aptLink);
 
     const mapsLink = el('a', 'ext-link', 'Google Maps');
     mapsLink.href = urls.gmaps;
