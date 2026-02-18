@@ -389,9 +389,8 @@
   function externalSearchUrls(address) {
     const slug = address.replace(/,/g, '').replace(/\s+/g, '-').replace(/-+/g, '-').trim().toLowerCase();
     return {
-      zillow:   'https://www.zillow.com/homes/'   + slug + '_rb/',
-      apartments: 'https://www.apartments.com/'  + slug + '/',
-      gmaps:    'https://maps.google.com/?q='     + encodeURIComponent(address),
+      zillow: 'https://www.zillow.com/homes/' + slug + '_rb/',
+      gmaps:  'https://maps.google.com/?q='   + encodeURIComponent(address),
     };
   }
 
@@ -614,12 +613,6 @@
     zillowLink.target = '_blank';
     zillowLink.rel = 'noopener';
     linksRow.appendChild(zillowLink);
-
-    const aptLink = el('a', 'ext-link', 'Apartments.com');
-    aptLink.href = urls.apartments;
-    aptLink.target = '_blank';
-    aptLink.rel = 'noopener';
-    linksRow.appendChild(aptLink);
 
     const mapsLink = el('a', 'ext-link', 'Google Maps');
     mapsLink.href = urls.gmaps;
