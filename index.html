@@ -280,6 +280,65 @@
     footer a { color: #6366f1; text-decoration: none; }
     footer a:hover { text-decoration: underline; }
 
+    /* ── Candidate picker ── */
+    .candidates-picker {
+      margin-bottom: 1.25rem;
+      background: #fff;
+      border: 1.5px solid #e2e8f0;
+      border-radius: 10px;
+      padding: 1rem 1.25rem;
+    }
+    .candidates-title {
+      font-size: 0.85rem;
+      font-weight: 600;
+      color: #64748b;
+      margin-bottom: 0.75rem;
+    }
+    .candidate-option {
+      display: flex;
+      align-items: center;
+      gap: 0.75rem;
+      padding: 0.65rem 0.85rem;
+      margin-bottom: 0.5rem;
+      border: 1.5px solid #e2e8f0;
+      border-radius: 8px;
+      cursor: pointer;
+      transition: all 0.15s;
+    }
+    .candidate-option:hover {
+      background: #f8fafc;
+      border-color: #cbd5e1;
+    }
+    .candidate-option.selected {
+      background: #eff6ff;
+      border-color: #3b82f6;
+    }
+    .candidate-option input[type="radio"] {
+      flex-shrink: 0;
+      width: 16px;
+      height: 16px;
+      cursor: pointer;
+    }
+    .candidate-details {
+      flex: 1;
+      min-width: 0;
+    }
+    .candidate-address {
+      font-size: 0.9rem;
+      font-weight: 500;
+      color: #1e293b;
+      margin-bottom: 0.2rem;
+    }
+    .candidate-meta {
+      font-size: 0.75rem;
+      color: #94a3b8;
+      display: flex;
+      gap: 0.75rem;
+      flex-wrap: wrap;
+    }
+    .candidate-rso-yes  { color: #15803d; font-weight: 600; }
+    .candidate-rso-no   { color: #94a3b8; }
+
     /* ── Search history ── */
     .history-section {
       margin-top: 2rem;
@@ -435,19 +494,31 @@
   // ── URL helpers ────────────────────────────────────────────────
 
   function getAddressFromUrl() {
-    return new URLSearchParams(window.location.search).get('address') || '';
+    const params = new URLSearchParams(window.location.search);
+    return {
+      address: params.get('address') || '',
+      candidateIndex: params.get('c') ? parseInt(params.get('c'), 10) : null,
+    };
   }
 
-  function setAddressInUrl(address) {
+  function setAddressInUrl(address, candidateIndex) {
     const url = new URL(window.location.href);
-    if (address) url.searchParams.set('address', address);
-    else url.searchParams.delete('address');
+    if (address) {
+      url.searchParams.set('address', address);
+      if (candidateIndex != null) url.searchParams.set('c', candidateIndex);
+      else url.searchParams.delete('c');
+    } else {
+      url.searchParams.delete('address');
+      url.searchParams.delete('c');
+    }
     history.replaceState(null, '', url.toString());
   }
 
-  function getShareUrl(address) {
+  function getShareUrl(address, candidateIndex) {
     const url = new URL(window.location.href);
     url.searchParams.set('address', address);
+    if (candidateIndex != null) url.searchParams.set('c', candidateIndex);
+    else url.searchParams.delete('c');
     return url.toString();
   }
 
@@ -484,23 +555,23 @@
 
   // ── Lookup ─────────────────────────────────────────────────────
 
-  async function lookup(address) {
+  async function lookup(address, candidateIndex) {
     address = address.trim();
     if (!address) return;
 
-    setAddressInUrl(address);
+    setAddressInUrl(address, candidateIndex);
     input.value = address;
     showLoading(address);
 
     const cached = cacheGet(address);
-    if (cached) { showResult(cached); return; }
+    if (cached) { showResult(cached, candidateIndex); return; }
 
     try {
       submitBtn.disabled = true;
       const res  = await fetch(API + '?address=' + encodeURIComponent(address));
       const data = await res.json();
       if (data.success) cacheSet(address, data);
-      showResult(data);
+      showResult(data, candidateIndex);
       historyPush(address, data);
     } catch {
       showNetworkError();
@@ -513,6 +584,49 @@
 
   function clearResult() {
     while (resultDiv.firstChild) resultDiv.removeChild(resultDiv.firstChild);
+  }
+
+  function renderCandidatesPicker(data, currentIndex) {
+    if (!data.candidates || data.candidates.length <= 1) return null;
+
+    const picker = el('div', 'candidates-picker');
+    picker.appendChild(el('div', 'candidates-title', 'Multiple addresses found — select one:'));
+
+    data.candidates.forEach((candidate, idx) => {
+      const option = el('div', 'candidate-option' + (idx === currentIndex ? ' selected' : ''));
+
+      const radio = document.createElement('input');
+      radio.type = 'radio';
+      radio.name = 'candidate';
+      radio.value = idx;
+      radio.checked = idx === currentIndex;
+      radio.addEventListener('change', () => {
+        setAddressInUrl(data.query, idx);
+        showResult(data, idx);
+      });
+      option.appendChild(radio);
+
+      const details = el('div', 'candidate-details');
+      details.appendChild(el('div', 'candidate-address', candidate.property.address || 'Unknown'));
+
+      const meta = el('div', 'candidate-meta');
+      const rsoText = candidate.rent_control.rso ? 'RSO: Yes' : 'RSO: No';
+      const rsoCls = candidate.rent_control.rso ? 'candidate-rso-yes' : 'candidate-rso-no';
+      meta.appendChild(el('span', rsoCls, rsoText));
+      if (candidate.property.year_built) {
+        meta.appendChild(el('span', null, 'Built ' + candidate.property.year_built));
+      }
+      details.appendChild(meta);
+      option.appendChild(details);
+
+      option.addEventListener('click', (e) => {
+        if (e.target.tagName !== 'INPUT') radio.click();
+      });
+
+      picker.appendChild(option);
+    });
+
+    return picker;
   }
 
   function showLoading(address) {
@@ -531,8 +645,22 @@
     resultDiv.appendChild(card);
   }
 
-  function showResult(data) {
+  function showResult(data, candidateIndex) {
     clearResult();
+
+    // If candidateIndex provided and candidates exist, use that candidate's data
+    if (candidateIndex != null && data.candidates && data.candidates[candidateIndex]) {
+      const selected = data.candidates[candidateIndex];
+      // Merge selected candidate into data for rendering
+      data = {
+        ...data,
+        property: selected.property,
+        rent_control: selected.rent_control,
+        rent_increase: selected.rent_increase,
+        summary: selected.summary,
+        selected_index: candidateIndex,
+      };
+    }
 
     if (!data.success) {
       if (data.unsupported_city) {
@@ -693,7 +821,8 @@
     const shareBtn = el('button', 'share-btn', 'Copy link');
     shareBtn.addEventListener('click', () => {
       const shareAddress = (data.query || input.value).trim();
-      navigator.clipboard.writeText(getShareUrl(shareAddress)).then(() => {
+      const shareCandidateIndex = data.candidates && data.candidates.length > 1 ? currentIndex : null;
+      navigator.clipboard.writeText(getShareUrl(shareAddress, shareCandidateIndex)).then(() => {
         shareBtn.textContent = 'Copied!';
         shareBtn.classList.add('copied');
         setTimeout(() => {
@@ -710,6 +839,12 @@
     card.appendChild(body);
     card.appendChild(linksRow);
     card.appendChild(footer);
+
+    // ── Render candidates picker if multiple results ──
+    const currentIndex = data.selected_index != null ? data.selected_index : 0;
+    const picker = renderCandidatesPicker(data, currentIndex);
+    if (picker) resultDiv.appendChild(picker);
+
     resultDiv.appendChild(card);
   }
 
@@ -824,8 +959,8 @@
     if (addr) lookup(addr);
   });
 
-  const urlAddress = getAddressFromUrl();
-  if (urlAddress) lookup(urlAddress);
+  const urlParams = getAddressFromUrl();
+  if (urlParams.address) lookup(urlParams.address, urlParams.candidateIndex);
   renderHistory();
 </script>
 
