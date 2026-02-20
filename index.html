@@ -21,7 +21,8 @@
       padding: 2rem 1.5rem 1.75rem;
       text-align: center;
     }
-    header h1 { font-size: 1.5rem; font-weight: 700; letter-spacing: -0.02em; }
+    header h1 { font-size: 1.5rem; font-weight: 700; letter-spacing: -0.02em; cursor: pointer; }
+    header h1:hover { opacity: 0.85; }
     header p  { margin-top: 0.4rem; font-size: 0.9rem; color: #94a3b8; }
 
     main {
@@ -279,6 +280,66 @@
     footer a { color: #6366f1; text-decoration: none; }
     footer a:hover { text-decoration: underline; }
 
+    /* ── Search history ── */
+    .history-section {
+      margin-top: 2rem;
+      border: 1px solid #e2e8f0;
+      border-radius: 10px;
+      overflow: hidden;
+      background: #fff;
+    }
+    .history-section summary {
+      padding: 0.75rem 1.1rem;
+      font-size: 0.82rem;
+      font-weight: 600;
+      color: #64748b;
+      cursor: pointer;
+      user-select: none;
+      list-style: none;
+      display: flex;
+      align-items: center;
+      gap: 0.4rem;
+    }
+    .history-section summary::-webkit-details-marker { display: none; }
+    .history-section summary::before { content: '▶'; font-size: 0.65rem; transition: transform 0.15s; }
+    .history-section[open] summary::before { transform: rotate(90deg); }
+    .history-table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 0.8rem;
+    }
+    .history-table th {
+      text-align: left;
+      padding: 0.4rem 1.1rem;
+      background: #f8fafc;
+      border-top: 1px solid #e2e8f0;
+      color: #94a3b8;
+      font-weight: 600;
+      font-size: 0.72rem;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+    }
+    .history-table td {
+      padding: 0.45rem 1.1rem;
+      border-top: 1px solid #f1f5f9;
+      color: #475569;
+      vertical-align: top;
+    }
+    .history-table td:first-child { color: #94a3b8; white-space: nowrap; }
+    .history-table tr:hover td { background: #f8fafc; cursor: pointer; }
+    .history-rso-yes  { color: #15803d; font-weight: 600; }
+    .history-rso-weho { color: #0e7490; font-weight: 600; }
+    .history-rso-no   { color: #94a3b8; }
+    .history-rso-err  { color: #be123c; }
+    .history-clear {
+      float: right;
+      font-size: 0.72rem;
+      color: #cbd5e1;
+      font-weight: 400;
+      cursor: pointer;
+    }
+    .history-clear:hover { color: #94a3b8; }
+
     @media (max-width: 480px) {
       .search-form { flex-direction: column; }
       .card-footer { flex-direction: column; align-items: flex-start; }
@@ -288,7 +349,7 @@
 <body>
 
 <header>
-  <h1>LA / WeHo Rent Control Lookup</h1>
+  <h1 id="site-title">LA / WeHo Rent Control Lookup</h1>
   <p>Instant RSO and rent stabilization status for Los Angeles and West Hollywood</p>
 </header>
 
@@ -307,6 +368,7 @@
   <p class="search-hint">Covers City of Los Angeles and West Hollywood. Include city name for best results.</p>
 
   <div id="result"></div>
+  <div id="history-container"></div>
 </main>
 
 <footer>
@@ -317,14 +379,17 @@
 </footer>
 
 <script>
-  const API      = 'https://ni3ydvpk37.execute-api.us-east-1.amazonaws.com/prod/lookup';
-  const CACHE_KEY = 'la-rso-cache';
-  const CACHE_TTL = 7 * 24 * 60 * 60 * 1000; // 7 days ms
+  const API        = 'https://ni3ydvpk37.execute-api.us-east-1.amazonaws.com/prod/lookup';
+  const CACHE_KEY  = 'la-rso-cache';
+  const CACHE_TTL  = 7 * 24 * 60 * 60 * 1000; // 7 days ms
+  const HISTORY_KEY = 'la-rso-history';
+  const HISTORY_MAX = 50;
 
-  const form      = document.getElementById('search-form');
-  const input     = document.getElementById('address-input');
-  const submitBtn = document.getElementById('submit-btn');
-  const resultDiv = document.getElementById('result');
+  const form            = document.getElementById('search-form');
+  const input           = document.getElementById('address-input');
+  const submitBtn       = document.getElementById('submit-btn');
+  const resultDiv       = document.getElementById('result');
+  const historyContainer = document.getElementById('history-container');
 
   // ── Cache helpers ──────────────────────────────────────────────
 
@@ -436,6 +501,7 @@
       const data = await res.json();
       if (data.success) cacheSet(address, data);
       showResult(data);
+      historyPush(address, data);
     } catch {
       showNetworkError();
     } finally {
@@ -647,7 +713,110 @@
     resultDiv.appendChild(card);
   }
 
+  // ── Search history ─────────────────────────────────────────────
+
+  function historyLoad() {
+    try { return JSON.parse(localStorage.getItem(HISTORY_KEY) || '[]'); }
+    catch { return []; }
+  }
+
+  function historySave(entries) {
+    try { localStorage.setItem(HISTORY_KEY, JSON.stringify(entries)); } catch {}
+  }
+
+  function historyPush(query, data) {
+    const entries = historyLoad();
+    let result;
+    if (!data.success) {
+      result = { status: 'error', label: data.unsupported_city ? (data.unsupported_city + ' not supported') : (data.error || 'Error') };
+    } else {
+      const isWeHo = data.city === 'West Hollywood';
+      const isRSO  = data.rent_control && data.rent_control.rso;
+      result = {
+        status: isWeHo ? 'weho' : isRSO ? 'rso' : 'no',
+        label:  isWeHo ? 'Rent Stabilized (WeHo)' : isRSO ? 'Rent Controlled (LA RSO)' : 'Not Rent Controlled',
+        address: (data.property && data.property.address) || '',
+      };
+    }
+    entries.unshift({ ts: Date.now(), query, result });
+    if (entries.length > HISTORY_MAX) entries.length = HISTORY_MAX;
+    historySave(entries);
+    renderHistory();
+  }
+
+  function renderHistory() {
+    while (historyContainer.firstChild) historyContainer.removeChild(historyContainer.firstChild);
+    const entries = historyLoad();
+    if (!entries.length) return;
+
+    const details = document.createElement('details');
+    details.className = 'history-section';
+
+    const summary = document.createElement('summary');
+    const clearBtn = el('span', 'history-clear', 'clear');
+    clearBtn.addEventListener('click', e => {
+      e.preventDefault();
+      e.stopPropagation();
+      historySave([]);
+      renderHistory();
+    });
+    summary.appendChild(document.createTextNode('Recent searches (' + entries.length + ')'));
+    summary.appendChild(clearBtn);
+    details.appendChild(summary);
+
+    const table = el('table', 'history-table');
+    const thead = document.createElement('thead');
+    const hr = document.createElement('tr');
+    ['Date', 'Query', 'Result', 'Address'].forEach(h => {
+      const th = document.createElement('th');
+      th.textContent = h;
+      hr.appendChild(th);
+    });
+    thead.appendChild(hr);
+    table.appendChild(thead);
+
+    const tbody = document.createElement('tbody');
+    entries.forEach(entry => {
+      const tr = document.createElement('tr');
+      tr.addEventListener('click', () => lookup(entry.query));
+
+      const date = new Date(entry.ts);
+      const dateStr = (date.getMonth()+1) + '/' + date.getDate() + ' ' +
+                      date.getHours().toString().padStart(2,'0') + ':' +
+                      date.getMinutes().toString().padStart(2,'0');
+
+      const statusCls = entry.result.status === 'rso'  ? 'history-rso-yes'
+                      : entry.result.status === 'weho' ? 'history-rso-weho'
+                      : entry.result.status === 'no'   ? 'history-rso-no'
+                      : 'history-rso-err';
+
+      [
+        { text: dateStr, cls: null },
+        { text: entry.query, cls: null },
+        { text: entry.result.label, cls: statusCls },
+        { text: entry.result.address || '—', cls: null },
+      ].forEach(({ text, cls }) => {
+        const td = document.createElement('td');
+        td.textContent = text;
+        if (cls) td.className = cls;
+        tr.appendChild(td);
+      });
+      tbody.appendChild(tr);
+    });
+    table.appendChild(tbody);
+    details.appendChild(table);
+    historyContainer.appendChild(details);
+  }
+
   // ── Bootstrap ─────────────────────────────────────────────────
+
+  // Title click → reset to blank search
+  document.getElementById('site-title').addEventListener('click', () => {
+    clearResult();
+    setAddressInUrl('');
+    input.value = '';
+    input.focus();
+  });
 
   form.addEventListener('submit', e => {
     e.preventDefault();
@@ -657,6 +826,7 @@
 
   const urlAddress = getAddressFromUrl();
   if (urlAddress) lookup(urlAddress);
+  renderHistory();
 </script>
 
 </body>
